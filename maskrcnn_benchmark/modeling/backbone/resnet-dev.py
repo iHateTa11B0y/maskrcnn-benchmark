@@ -19,6 +19,7 @@ from torch import nn
 from maskrcnn_benchmark.layers import FrozenBatchNorm2d
 from maskrcnn_benchmark.layers import Conv2d
 
+
 # ResNet stage specification
 StageSpec = namedtuple(
     "StageSpec",
@@ -53,14 +54,9 @@ ResNet101FPNStagesTo5 = (
     for (i, c, r) in ((1, 3, True), (2, 4, True), (3, 23, True), (4, 3, True))
 )
 
-SEResNext50_32x4d_FPNStagesTo5 = (
-    StageSpec(index=i, block_count=c, return_features=r)
-    for (i, c, r) in ((1, 3, True), (2, 4, True), (3, 6, True), (4, 3, True))
-)
-
 
 class ResNet(nn.Module):
-    def __init__(self, cfg, se=False):
+    def __init__(self, cfg):
         super(ResNet, self).__init__()
 
         # If we want to use the cfg in forward(), then we should make a copy
@@ -78,18 +74,11 @@ class ResNet(nn.Module):
         # Constuct the specified ResNet stages
         num_groups = cfg.MODEL.RESNETS.NUM_GROUPS
         width_per_group = cfg.MODEL.RESNETS.WIDTH_PER_GROUP
-
-        if se and num_groups!=32:
-            print("invalid `num_groups` in cfg. forcing 32 in se_50_32x4d. ")
-            num_groups =32
-            width_per_group = 4
-
         in_channels = cfg.MODEL.RESNETS.STEM_OUT_CHANNELS
         stage2_bottleneck_channels = num_groups * width_per_group
         stage2_out_channels = cfg.MODEL.RESNETS.RES2_OUT_CHANNELS
         self.stages = []
         self.return_features = {}
-
         for stage_spec in stage_specs:
             name = "layer" + str(stage_spec.index)
             stage2_relative_factor = 2 ** (stage_spec.index - 1)
@@ -104,7 +93,6 @@ class ResNet(nn.Module):
                 num_groups,
                 cfg.MODEL.RESNETS.STRIDE_IN_1X1,
                 first_stride=int(stage_spec.index > 1) + 1,
-                se = se
             )
             in_channels = out_channels
             self.add_module(name, module)
@@ -143,7 +131,6 @@ class ResNetHead(nn.Module):
         stride_in_1x1=True,
         stride_init=None,
         res2_out_channels=256,
-        se = False
     ):
         super(ResNetHead, self).__init__()
 
@@ -170,7 +157,6 @@ class ResNetHead(nn.Module):
                 num_groups,
                 stride_in_1x1,
                 first_stride=stride,
-                se = se
             )
             stride = None
             self.add_module(name, module)
@@ -191,7 +177,6 @@ def _make_stage(
     num_groups,
     stride_in_1x1,
     first_stride,
-    se,
 ):
     blocks = []
     stride = first_stride
@@ -204,34 +189,11 @@ def _make_stage(
                 num_groups,
                 stride_in_1x1,
                 stride,
-                se,
             )
         )
         stride = 1
         in_channels = out_channels
     return nn.Sequential(*blocks)
-
-
-class SEModule(nn.Module):
-
-    def __init__(self, channels, reduction):
-        super(SEModule, self).__init__()
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.fc1 = nn.Conv2d(channels, channels // reduction, kernel_size=1,
-                             padding=0)
-        self.relu = nn.ReLU(inplace=True)
-        self.fc2 = nn.Conv2d(channels // reduction, channels, kernel_size=1,
-                             padding=0)
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, x):
-        module_input = x
-        x = self.avg_pool(x)
-        x = self.fc1(x)
-        x = self.relu(x)
-        x = self.fc2(x)
-        x = self.sigmoid(x)
-        return module_input * x
 
 
 class BottleneckWithFixedBatchNorm(nn.Module):
@@ -243,7 +205,6 @@ class BottleneckWithFixedBatchNorm(nn.Module):
         num_groups=1,
         stride_in_1x1=True,
         stride=1,
-        se=False,
     ):
         super(BottleneckWithFixedBatchNorm, self).__init__()
 
@@ -287,10 +248,6 @@ class BottleneckWithFixedBatchNorm(nn.Module):
         )
         self.bn3 = FrozenBatchNorm2d(out_channels)
 
-        self.se_module = None
-        if se:
-            self.se = SEModule(out_channels, reduction=16)
-
     def forward(self, x):
         residual = x
 
@@ -307,12 +264,8 @@ class BottleneckWithFixedBatchNorm(nn.Module):
 
         if self.downsample is not None:
             residual = self.downsample(x)
-        
-        if self.se:
-            out = self.se(out) + residual
-        else:    
-            out += residual
 
+        out += residual
         out = F.relu_(out)
 
         return out
@@ -346,7 +299,6 @@ _STAGE_SPECS = {
     "R-50-C5": ResNet50StagesTo5,
     "R-50-FPN": ResNet50FPNStagesTo5,
     "R-101-FPN": ResNet101FPNStagesTo5,
-    "SE-R-50-32x4d-FPN": SEResNext50_32x4d_FPNStagesTo5,
 }
 
 

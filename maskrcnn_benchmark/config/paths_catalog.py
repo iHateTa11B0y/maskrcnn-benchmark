@@ -5,7 +5,7 @@ import os
 
 
 class DatasetCatalog(object):
-    DATA_DIR = "datasets"
+    DATA_DIR = ""
 
     DATASETS = {
         "coco_2014_train": (
@@ -21,6 +21,68 @@ class DatasetCatalog(object):
             "coco/val2014",
             "coco/annotations/instances_valminusminival2014.json",
         ),
+        "coco_gbox_soft_package_train": (
+            "",
+            "/core1/data/home/niuwenhao/soft_package/segs/coco_gbox_soft_package_train.json",
+        ),
+        "coco_gbox_soft_package_test": (
+            "",
+            "/core1/data/home/niuwenhao/soft_package/segs/coco_gbox_soft_package_test.json",
+        ),
+        "coco_gbox_soft_package_ordered_train": (
+            "",
+            "/core1/data/home/niuwenhao/soft_package/segs/coco_gbox_soft_package_ordered_train.json",
+        ),
+        "coco_gbox_soft_package_ordered_test": (
+            "",
+            "/core1/data/home/niuwenhao/soft_package/segs/coco_gbox_soft_package_ordered_test.json",
+        ),
+        "coco_brain_hole_v1": (
+            "",
+            "/core1/data/home/liuhuawei/data-manager/data/cx_brain_hole/coco_cx_brain_hole_v1_train_new.json",
+        ),
+        "coco_brain_hole_v1_val": (
+            "",
+            "/core1/data/home/liuhuawei/data-manager/data/cx_brain_hole/coco_cx_brain_hole_v1_test_new.json",
+        ),
+        "coco_all_detection": (
+            "",
+            "/core1/data/home/liuhuawei/data-manager/data/all_detection/coco_all_detection_train_new.json",
+        ),
+        "coco_all_detection_etra": (
+            "",
+            "/core1/data/home/liuhuawei/data-manager/data/all_detection/coco_all_detection_extra_train_new.json",
+        ),
+        "coco_iuu_all_train_new": (
+            "",
+            "/core1/data/home/liuhuawei/data-manager/data/all_detection/iuu_all_train_new.json",
+        ),
+        "coco_all_detection_extra_2": (
+            "",
+            "/core1/data/home/liuhuawei/data-manager/data/all_detection/coco_all_detection_extra_2_train_new.json",
+        ),
+        
+        "coco_mryx_testset_val": (
+            "",
+            "/core1/data/home/liuhuawei/data-manager/data/testset/coco_mryx_testset_test_new.json",
+        ),
+        "coco_iuu_all_val": (
+            "",
+            "/core1/data/home/liuhuawei/data-manager/data/0724/iuu_all_test_new_clean.json",
+        ),
+        "coco_midea_testset_val": (
+            "",
+            "/core1/data/home/liuhuawei/data-manager/data/testset/coco_midea_testset_test_new.json",
+        ),
+        "coco_gbox_testset_val": (
+            "",
+            "/core1/data/home/liuhuawei/data-manager/data/testset/coco_gbox_testset_test_new.json",
+        ),
+        "coco_infer_val": (
+            "",
+            "/data/wenhao/data/seg/utils/test.json",
+        ),
+        
     }
 
     @staticmethod

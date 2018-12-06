@@ -1,9 +1,10 @@
 MODEL:
   META_ARCHITECTURE: "GeneralizedRCNN"
-  WEIGHT: "catalog://ImageNetPretrained/MSRA/R-101"
-  #WEIGHT: "/data/wenhao/maskrcnn-benchmark/cache/models/se_resnext50_32x4d_cv_det.pkl"
+  #WEIGHT: "catalog://ImageNetPretrained/MSRA/R-101"
+  WEIGHT: "/data/wenhao/data/model_weight/se_resnext50_32x4d_cv_det.pkl"
+  #WEIGHT: "/data/wenhao/data/model_weight/cv_se_resnext50_32x4d-79ac6b92.pth"
   BACKBONE:
-    CONV_BODY: "R-101-FPN"
+    CONV_BODY: "SE-R-50-32x4d-FPN"
     OUT_CHANNELS: 256
   RPN:
     USE_FPN: True
@@ -14,12 +15,14 @@ MODEL:
     FPN_POST_NMS_TOP_N_TEST: 1000
   ROI_HEADS:
     USE_FPN: True
+    NMS: 0.5
   ROI_BOX_HEAD:
     POOLER_RESOLUTION: 7
     POOLER_SCALES: (0.25, 0.125, 0.0625, 0.03125)
     POOLER_SAMPLING_RATIO: 2
     FEATURE_EXTRACTOR: "FPN2MLPFeatureExtractor"
     PREDICTOR: "FPNPredictor"
+    NUM_CLASSES: 3
   ROI_MASK_HEAD:
     POOLER_SCALES: (0.25, 0.125, 0.0625, 0.03125)
     FEATURE_EXTRACTOR: "MaskRCNNFPNFeatureExtractor"
@@ -29,16 +32,28 @@ MODEL:
     RESOLUTION: 28
     SHARE_BOX_FEATURE_EXTRACTOR: False
   MASK_ON: True
+  RESNETS:
+    STRIDE_IN_1X1: False
 DATASETS:
   #TRAIN: ( "coco_gbox_soft_package_train", )
-  TRAIN: ( "coco_brain_hole_v1", )
-  #TEST: ( "coco_gbox_soft_package_test",)
-  TEST: ( "coco_brain_hole_v1_val",)
+  TRAIN: ( "coco_all_detection", "coco_iuu_all_train_new", )
+  #TRAIN: ( "coco_all_detection", )
+  #TEST: ( "coco_mryx_testset_val",)
+  TEST: ( "coco_mryx_testset_val", "coco_midea_testset_val", "coco_gbox_testset_val", )
+  #"coco_iuu_all_val"
 DATALOADER:
   SIZE_DIVISIBILITY: 32
+  NUM_WORKERS: 4
 SOLVER:
   BASE_LR: 0.01
+  WARMUP_FACTOR: 0.1
+  #WARMUP_ITERS: 1000
+  #WARMUP_METHOD: "constant"
   WEIGHT_DECAY: 0.0001
-  STEPS: (6000, 8000)
-  MAX_ITER: 9000
+  STEPS: (12000, 16000)
+  MAX_ITER: 18000
+  IMS_PER_BATCH: 4 # differnt from detecron
+TEST:
+  IMS_PER_BATCH: 4
 OUTPUT_DIR: "cache/"
+DEBUG: True

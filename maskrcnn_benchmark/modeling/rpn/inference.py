@@ -104,19 +104,24 @@ class RPNPostProcessor(torch.nn.Module):
         )
 
         proposals = proposals.view(N, -1, 4)
-
+        #print('proposals shape: {}'.format(proposals.shape))
+        #print(proposals)
+        #raise
         result = []
         for proposal, score, im_shape in zip(proposals, objectness, image_shapes):
             boxlist = BoxList(proposal, im_shape, mode="xyxy")
+            #print('origin: {}'.format(boxlist.bbox.shape))
             boxlist.add_field("objectness", score)
             boxlist = boxlist.clip_to_image(remove_empty=False)
             boxlist = remove_small_boxes(boxlist, self.min_size)
+            #print('rm_small: {}'.format(boxlist.bbox.shape))
             boxlist = boxlist_nms(
                 boxlist,
                 self.nms_thresh,
                 max_proposals=self.post_nms_top_n,
                 score_field="objectness",
             )
+            #print('nms: {}'.format(boxlist.bbox.shape))
             result.append(boxlist)
         return result
 

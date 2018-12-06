@@ -47,6 +47,7 @@ class MetricLogger(object):
             if isinstance(v, torch.Tensor):
                 v = v.item()
             assert isinstance(v, (float, int))
+            #print('{}: {}'.format(k,v))
             self.meters[k].update(v)
 
     def __getattr__(self, attr):

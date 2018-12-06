@@ -54,18 +54,18 @@ def do_train(
     start_training_time = time.time()
     end = time.time()
     for iteration, (images, targets, _) in enumerate(data_loader, start_iter):
+        #print(iteration)
         data_time = time.time() - end
         arguments["iteration"] = iteration
-
+        #print('#1')
         scheduler.step()
-
+        #print('#2')
         images = images.to(device)
+        #print('#3')
         targets = [target.to(device) for target in targets]
-
+        #print('#4')
         loss_dict = model(images, targets)
-
         losses = sum(loss for loss in loss_dict.values())
-
         # reduce losses over all GPUs for logging purposes
         loss_dict_reduced = reduce_loss_dict(loss_dict)
         losses_reduced = sum(loss for loss in loss_dict_reduced.values())
@@ -74,7 +74,7 @@ def do_train(
         optimizer.zero_grad()
         losses.backward()
         optimizer.step()
-
+        
         batch_time = time.time() - end
         end = time.time()
         meters.update(time=batch_time, data=data_time)
@@ -82,7 +82,7 @@ def do_train(
         eta_seconds = meters.time.global_avg * (max_iter - iteration)
         eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
 
-        if iteration % 20 == 0 or iteration == (max_iter - 1):
+        if iteration % 1 == 0 or iteration == (max_iter - 1):
             logger.info(
                 meters.delimiter.join(
                     [

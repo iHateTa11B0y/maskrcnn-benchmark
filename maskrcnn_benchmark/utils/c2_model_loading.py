@@ -130,6 +130,7 @@ def _load_c2_pickled_weights(file_path):
 _C2_STAGE_NAMES = {
     "R-50": ["1.2", "2.3", "3.5", "4.2"],
     "R-101": ["1.2", "2.3", "3.22", "4.2"],
+    "SE-R-50-32x4d": ["1.2", "2.3", "3.5", "4.2"],
 }
 
 def load_c2_format(cfg, f):

@@ -20,19 +20,74 @@ from maskrcnn_benchmark.modeling.roi_heads.mask_head.inference import Masker
 from maskrcnn_benchmark.structures.boxlist_ops import boxlist_iou
 
 
-def compute_on_dataset(model, data_loader, device):
+def compute_on_dataset(model, data_loader, device, debug=None):
     model.eval()
     results_dict = {}
     cpu_device = torch.device("cpu")
+    #### niu
+    original_ids = data_loader.dataset.id_to_img_map
+    props_all = {}
+    score_all = {}
+    bbox_all = {}
+    bbox_score_all = {}
+    ####
     for i, batch in tqdm(enumerate(data_loader)):
         images, targets, image_ids = batch
         images = images.to(device)
+        #### niu
+        #print(image_ids)
+        og_ids = [original_ids[_] for _ in image_ids]
+        print(og_ids)
+        #raise
+        #### end
         with torch.no_grad():
-            output = model(images)
+            #### niu
+            if debug:
+                output = model(images, im_ids=og_ids)
+            else:
+                output = model(images)
+            #### collect info
+            if debug:
+                props_all.update(model.proposal_info)
+                score_all.update(model.proposal_score)
+                bbox_all.update(model.bboxlist)
+                bbox_score_all.update(model.bboxlist_score)
+            #### end
             output = [o.to(cpu_device) for o in output]
         results_dict.update(
             {img_id: result for img_id, result in zip(image_ids, output)}
         )
+    
+    if not debug:
+        return results_dict 
+    #### niu: dump props
+    import json
+    proposals = {}
+    pscores = {}
+    bboxes = {}
+    bscores = {}
+    allp = scatter_gather(props_all)
+    alls = scatter_gather(score_all)
+    allb = scatter_gather(bbox_all)
+    allbs = scatter_gather(bbox_score_all)
+    if is_main_process():
+        for p in allp:
+            proposals.update(p)
+        for s in alls:
+            pscores.update(s)
+        for b in allb:
+            bboxes.update(b)
+        for bs in allbs:
+            bscores.update(bs)
+        #print(proposals.keys())
+        
+        with open(debug+'/proposals.json','w') as o:
+            json.dump([proposals,pscores],o)
+        with open(debug+'/bboxes_bf.json','w') as o:
+            json.dump([bboxes,bscores],o)
+    else:
+        pass
+    #### end
     return results_dict
 
 
@@ -53,9 +108,11 @@ def prepare_for_coco_detection(predictions, dataset):
         boxes = prediction.bbox.tolist()
         scores = prediction.get_field("scores").tolist()
         labels = prediction.get_field("labels").tolist()
-
+        
+        #print(labels)
+        #print('-------------------------------')
+        #print(dataset.contiguous_category_id_to_json_id)
         mapped_labels = [dataset.contiguous_category_id_to_json_id[i] for i in labels]
-
         coco_results.extend(
             [
                 {
@@ -106,7 +163,7 @@ def prepare_for_coco_segmentation(predictions, dataset):
             rle["counts"] = rle["counts"].decode("utf-8")
 
         mapped_labels = [dataset.contiguous_category_id_to_json_id[i] for i in labels]
-
+        
         coco_results.extend(
             [
                 {
@@ -245,9 +302,9 @@ def evaluate_predictions_on_coco(
 
     with open(json_result_file, "w") as f:
         json.dump(coco_results, f)
-
+    
     from pycocotools.cocoeval import COCOeval
-
+    
     coco_dt = coco_gt.loadRes(str(json_result_file))
     # coco_dt = coco_gt.loadRes(coco_results)
     coco_eval = COCOeval(coco_gt, coco_dt, iou_type)
@@ -259,6 +316,8 @@ def evaluate_predictions_on_coco(
 
 def _accumulate_predictions_from_multiple_gpus(predictions_per_gpu):
     all_predictions = scatter_gather(predictions_per_gpu)
+    #print(all_predictions)
+    #raise
     if not is_main_process():
         return
     # merge the list of dicts
@@ -355,6 +414,7 @@ def inference(
     expected_results=(),
     expected_results_sigma_tol=4,
     output_folder=None,
+    debug = False
 ):
 
     # convert to a torch.device for efficiency
@@ -368,7 +428,13 @@ def inference(
     dataset = data_loader.dataset
     logger.info("Start evaluation on {} images".format(len(dataset)))
     start_time = time.time()
-    predictions = compute_on_dataset(model, data_loader, device)
+    #### niu
+    debug = output_folder if debug else None
+    #print(debug)
+    #raise
+    predictions = compute_on_dataset(model, data_loader, device, debug)
+    #### end
+
     # wait for all processes to complete before measuring the time
     synchronize()
     total_time = time.time() - start_time
@@ -378,8 +444,12 @@ def inference(
             total_time_str, total_time * num_devices / len(dataset), num_devices
         )
     )
-
+    
+    print(predictions)
+    
     predictions = _accumulate_predictions_from_multiple_gpus(predictions)
+    
+    #raise
     if not is_main_process():
         return
 

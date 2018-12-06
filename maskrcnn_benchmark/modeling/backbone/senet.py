@@ -19,6 +19,7 @@ from torch import nn
 from maskrcnn_benchmark.layers import FrozenBatchNorm2d
 from maskrcnn_benchmark.layers import Conv2d
 
+
 # ResNet stage specification
 StageSpec = namedtuple(
     "StageSpec",
@@ -30,28 +31,9 @@ StageSpec = namedtuple(
 )
 
 # -----------------------------------------------------------------------------
-# Standard ResNet models
+# SENet models
 # -----------------------------------------------------------------------------
-# ResNet-50 (including all stages)
-ResNet50StagesTo5 = (
-    StageSpec(index=i, block_count=c, return_features=r)
-    for (i, c, r) in ((1, 3, False), (2, 4, False), (3, 6, False), (4, 3, True))
-)
-# ResNet-50 up to stage 4 (excludes stage 5)
-ResNet50StagesTo4 = (
-    StageSpec(index=i, block_count=c, return_features=r)
-    for (i, c, r) in ((1, 3, False), (2, 4, False), (3, 6, True))
-)
-# ResNet-50-FPN (including all stages)
-ResNet50FPNStagesTo5 = (
-    StageSpec(index=i, block_count=c, return_features=r)
-    for (i, c, r) in ((1, 3, True), (2, 4, True), (3, 6, True), (4, 3, True))
-)
-# ResNet-101-FPN (including all stages)
-ResNet101FPNStagesTo5 = (
-    StageSpec(index=i, block_count=c, return_features=r)
-    for (i, c, r) in ((1, 3, True), (2, 4, True), (3, 23, True), (4, 3, True))
-)
+# SEResNext50_32x4d
 
 SEResNext50_32x4d_FPNStagesTo5 = (
     StageSpec(index=i, block_count=c, return_features=r)
@@ -59,9 +41,9 @@ SEResNext50_32x4d_FPNStagesTo5 = (
 )
 
 
-class ResNet(nn.Module):
-    def __init__(self, cfg, se=False):
-        super(ResNet, self).__init__()
+class SENet(nn.Module):
+    def __init__(self, cfg):
+        super(SENet, self).__init__()
 
         # If we want to use the cfg in forward(), then we should make a copy
         # of it and store it for later use:
@@ -76,25 +58,21 @@ class ResNet(nn.Module):
         self.stem = stem_module(cfg)
 
         # Constuct the specified ResNet stages
-        num_groups = cfg.MODEL.RESNETS.NUM_GROUPS
-        width_per_group = cfg.MODEL.RESNETS.WIDTH_PER_GROUP
-
-        if se and num_groups!=32:
-            print("invalid `num_groups` in cfg. forcing 32 in se_50_32x4d. ")
-            num_groups =32
-            width_per_group = 4
-
+        # num_groups = cfg.MODEL.RESNETS.NUM_GROUPS
+        num_groups = 32
+        #width_per_group = cfg.MODEL.RESNETS.WIDTH_PER_GROUP
+        width_per_group = 4
         in_channels = cfg.MODEL.RESNETS.STEM_OUT_CHANNELS
         stage2_bottleneck_channels = num_groups * width_per_group
         stage2_out_channels = cfg.MODEL.RESNETS.RES2_OUT_CHANNELS
         self.stages = []
         self.return_features = {}
-
         for stage_spec in stage_specs:
             name = "layer" + str(stage_spec.index)
             stage2_relative_factor = 2 ** (stage_spec.index - 1)
             bottleneck_channels = stage2_bottleneck_channels * stage2_relative_factor
             out_channels = stage2_out_channels * stage2_relative_factor
+
             module = _make_stage(
                 transformation_module,
                 in_channels,
@@ -104,7 +82,6 @@ class ResNet(nn.Module):
                 num_groups,
                 cfg.MODEL.RESNETS.STRIDE_IN_1X1,
                 first_stride=int(stage_spec.index > 1) + 1,
-                se = se
             )
             in_channels = out_channels
             self.add_module(name, module)
@@ -143,7 +120,6 @@ class ResNetHead(nn.Module):
         stride_in_1x1=True,
         stride_init=None,
         res2_out_channels=256,
-        se = False
     ):
         super(ResNetHead, self).__init__()
 
@@ -161,6 +137,7 @@ class ResNetHead(nn.Module):
             name = "layer" + str(stage.index)
             if not stride:
                 stride = int(stage.index > 1) + 1
+            
             module = _make_stage(
                 block_module,
                 in_channels,
@@ -170,7 +147,6 @@ class ResNetHead(nn.Module):
                 num_groups,
                 stride_in_1x1,
                 first_stride=stride,
-                se = se
             )
             stride = None
             self.add_module(name, module)
@@ -191,7 +167,6 @@ def _make_stage(
     num_groups,
     stride_in_1x1,
     first_stride,
-    se,
 ):
     blocks = []
     stride = first_stride
@@ -204,13 +179,11 @@ def _make_stage(
                 num_groups,
                 stride_in_1x1,
                 stride,
-                se,
             )
         )
         stride = 1
         in_channels = out_channels
     return nn.Sequential(*blocks)
-
 
 class SEModule(nn.Module):
 
@@ -233,17 +206,16 @@ class SEModule(nn.Module):
         x = self.sigmoid(x)
         return module_input * x
 
-
+## se_resnext
 class BottleneckWithFixedBatchNorm(nn.Module):
     def __init__(
         self,
         in_channels,
         bottleneck_channels,
         out_channels,
-        num_groups=1,
+        num_groups=32,
         stride_in_1x1=True,
         stride=1,
-        se=False,
     ):
         super(BottleneckWithFixedBatchNorm, self).__init__()
 
@@ -260,36 +232,34 @@ class BottleneckWithFixedBatchNorm(nn.Module):
         # The subsequent fb.torch.resnet and Caffe2 ResNe[X]t implementations have
         # stride in the 3x3 conv
         stride_1x1, stride_3x3 = (stride, 1) if stride_in_1x1 else (1, stride)
-
+        width = bottleneck_channels
+        
         self.conv1 = Conv2d(
             in_channels,
-            bottleneck_channels,
+            width,
             kernel_size=1,
             stride=stride_1x1,
             bias=False,
         )
-        self.bn1 = FrozenBatchNorm2d(bottleneck_channels)
+        self.bn1 = FrozenBatchNorm2d(width)
         # TODO: specify init for the above
 
         self.conv2 = Conv2d(
-            bottleneck_channels,
-            bottleneck_channels,
+            width,
+            width,
             kernel_size=3,
             stride=stride_3x3,
             padding=1,
             bias=False,
             groups=num_groups,
         )
-        self.bn2 = FrozenBatchNorm2d(bottleneck_channels)
+        self.bn2 = FrozenBatchNorm2d(width)
 
         self.conv3 = Conv2d(
-            bottleneck_channels, out_channels, kernel_size=1, bias=False
+            width, out_channels, kernel_size=1, bias=False
         )
         self.bn3 = FrozenBatchNorm2d(out_channels)
-
-        self.se_module = None
-        if se:
-            self.se = SEModule(out_channels, reduction=16)
+        self.se_module = SEModule(out_channels, reduction=16)
 
     def forward(self, x):
         residual = x
@@ -307,12 +277,9 @@ class BottleneckWithFixedBatchNorm(nn.Module):
 
         if self.downsample is not None:
             residual = self.downsample(x)
-        
-        if self.se:
-            out = self.se(out) + residual
-        else:    
-            out += residual
 
+        out = self.se_module(out) + residual
+        #out += residual
         out = F.relu_(out)
 
         return out
@@ -342,10 +309,6 @@ _TRANSFORMATION_MODULES = {"BottleneckWithFixedBatchNorm": BottleneckWithFixedBa
 _STEM_MODULES = {"StemWithFixedBatchNorm": StemWithFixedBatchNorm}
 
 _STAGE_SPECS = {
-    "R-50-C4": ResNet50StagesTo4,
-    "R-50-C5": ResNet50StagesTo5,
-    "R-50-FPN": ResNet50FPNStagesTo5,
-    "R-101-FPN": ResNet101FPNStagesTo5,
     "SE-R-50-32x4d-FPN": SEResNext50_32x4d_FPNStagesTo5,
 }
 

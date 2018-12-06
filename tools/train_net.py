@@ -28,6 +28,11 @@ from maskrcnn_benchmark.utils.miscellaneous import mkdir
 
 def train(cfg, local_rank, distributed):
     model = build_detection_model(cfg)
+    with open('model_details.txt','w') as f:
+        f.write(str(model))
+    with open('cfg.txt','w') as f:
+        f.write(str(cfg))
+    #raise
     device = torch.device(cfg.MODEL.DEVICE)
     model.to(device)
 
@@ -101,6 +106,7 @@ def test(cfg, model, distributed):
             expected_results=cfg.TEST.EXPECTED_RESULTS,
             expected_results_sigma_tol=cfg.TEST.EXPECTED_RESULTS_SIGMA_TOL,
             output_folder=output_folder,
+            debug=cfg.DEBUG,
         )
         synchronize()
 

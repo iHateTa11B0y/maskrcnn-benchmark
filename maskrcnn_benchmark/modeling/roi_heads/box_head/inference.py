@@ -33,6 +33,8 @@ class PostProcessor(nn.Module):
         if box_coder is None:
             box_coder = BoxCoder(weights=(10., 10., 5., 5.))
         self.box_coder = box_coder
+        #### niu
+        self.bboxlist = None
 
     def forward(self, x, boxes):
         """
@@ -64,13 +66,37 @@ class PostProcessor(nn.Module):
         class_prob = class_prob.split(boxes_per_image, dim=0)
 
         results = []
+       
+        tmp_bbx_list = []        
+        import copy
+
         for prob, boxes_per_img, image_shape in zip(
             class_prob, proposals, image_shapes
         ):
             boxlist = self.prepare_boxlist(boxes_per_img, prob, image_shape)
             boxlist = boxlist.clip_to_image(remove_empty=False)
+            #### niu
+            if not self.training:
+                print('testing!!!!!!!!')
+                print('before_filter_len: {}'.format(len(boxlist)))
+                #tmp_bbx_list.append(copy.deepcopy(boxlist))
+                debugbb = self.filter_results(boxlist, num_classes, nmsf=False, numberf=False)
+                tmp_bbx_list.append(copy.deepcopy(debugbb))
+                #self.bboxlist.append(self.filter_results(boxlist, num_classes, nmsf=False, numberf=False))
+            #### end
             boxlist = self.filter_results(boxlist, num_classes)
+            print('after_filter_len: {}'.format(len(boxlist)))
+            #if not self.training:
+            #    assert len(debugbb)==len(boxlist), 'mismatch!'
             results.append(boxlist)
+        #### niu
+        self.bboxlist = tuple(tmp_bbx_list)
+        if not self.training:
+            #print(self.bboxlist)
+            #print(results)
+            #self.bboxlist = results
+            pass
+        #### end
         return results
 
     def prepare_boxlist(self, boxes, scores, image_shape):
@@ -92,7 +118,7 @@ class PostProcessor(nn.Module):
         boxlist.add_field("scores", scores)
         return boxlist
 
-    def filter_results(self, boxlist, num_classes):
+    def filter_results(self, boxlist, num_classes, nmsf=True, numberf=True):
         """Returns bounding-box detection results by thresholding on scores and
         applying non-maximum suppression (NMS).
         """
@@ -100,7 +126,8 @@ class PostProcessor(nn.Module):
         # if we had multi-class NMS, we could perform this directly on the boxlist
         boxes = boxlist.bbox.reshape(-1, num_classes * 4)
         scores = boxlist.get_field("scores").reshape(-1, num_classes)
-
+        #print(num_classes)
+        #raise
         device = scores.device
         result = []
         # Apply threshold on detection probabilities and apply NMS
@@ -112,19 +139,28 @@ class PostProcessor(nn.Module):
             boxes_j = boxes[inds, j * 4 : (j + 1) * 4]
             boxlist_for_class = BoxList(boxes_j, boxlist.size, mode="xyxy")
             boxlist_for_class.add_field("scores", scores_j)
-            boxlist_for_class = boxlist_nms(
-                boxlist_for_class, self.nms, score_field="scores"
-            )
+            if nmsf:
+                boxlist_for_class = boxlist_nms(
+                    boxlist_for_class, self.nms, score_field="scores"
+                )
             num_labels = len(boxlist_for_class)
             boxlist_for_class.add_field(
                 "labels", torch.full((num_labels,), j, dtype=torch.int64, device=device)
             )
             result.append(boxlist_for_class)
-
+        
         result = cat_boxlist(result)
         number_of_detections = len(result)
-
+                
+        #### niu
+        if not self.training:
+            print('number_of_detections: {}'.format(number_of_detections))
+            print('self.detections_per_img: {}'.format(self.detections_per_img))
         # Limit to max_per_image detections **over all classes**
+        if not numberf:
+            return result
+        
+        #### end
         if number_of_detections > self.detections_per_img > 0:
             cls_scores = result.get_field("scores")
             image_thresh, _ = torch.kthvalue(
